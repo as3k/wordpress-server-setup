@@ -64,6 +64,7 @@ chmod +x /usr/bin/wp
 
 # Install wordpress
 echo -en "\Setting up WordPress..."
+wp core download --allow-root --path="/var/www/html"
 wp core install --allow-root --path="/var/www/html" --title="$title" --url="$dom" --admin_email="$email" --admin_password="$pass" --admin_user="$username"
 
 wp plugin install wp-fail2ban elementor autoptimize --allow-root --path="/var/www/html"
