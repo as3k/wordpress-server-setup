@@ -18,6 +18,60 @@ echo "Enter the domain name for your new WordPress site (ex: example.org or test
 echo "Do not include www or http/https."
 echo "--------------------------------------------------"
 
+echo -en "\nNow we will create your new admin user account for WordPress."
+
+# Function to prompt for WordPress admin account details
+function wordpress_admin_account(){
+  while [ -z "$email" ]; do
+    echo -en "\n"
+    read -p "Your Email Address: " email
+  done
+
+  while [ -z "$username" ]; do
+    echo -en "\n"
+    read -p "Username: " username
+  done
+
+  while [ -z "$pass" ]; do
+    echo -en "\n"
+    read -s -p "Password: " pass
+    echo -en "\n"
+  done
+
+  while [ -z "$title" ]; do
+    echo -en "\n"
+    read -p "Blog Title: " title
+  done
+}
+
+wordpress_admin_account
+
+while true; do
+    echo -en "\nIs the information correct? [Y/n] "
+    read -r confirmation
+    confirmation=${confirmation,,}
+    if [[ "$confirmation" =~ ^(yes|y)$ ]] || [ -z "$confirmation" ]; then
+      break
+    else
+      unset email username pass title confirmation
+      wordpress_admin_account
+    fi
+done
+
+# Installing wp-cli
+wget https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar -O /usr/bin/wp
+chmod +x /usr/bin/wp
+
+# Install wordpress
+echo -en "\Setting up WordPress..."
+wp core install --allow-root --path="/var/www/html" --title="$title" --url="$dom" --admin_email="$email" --admin_password="$pass" --admin_user="$username"
+
+wp plugin install wp-fail2ban elementor autoptimize --allow-root --path="/var/www/html"
+wp plugin activate wp-fail2ban elementor autoptimize --allow-root --path="/var/www/html"
+wp theme install hello-elementor --activate --allow-root --path="/var/www/html"
+chown -Rf www-data:www-data /var/www/
+echo "WordPress has been installed...\n"
+
 # Prompt for domain name until valid input is provided
 a=0
 while [ $a -eq 0 ]; do
@@ -65,46 +119,6 @@ fi
 echo "Restarting nginx..."
 systemctl restart nginx
 
-echo -en "\nNow we will create your new admin user account for WordPress."
-
-# Function to prompt for WordPress admin account details
-function wordpress_admin_account(){
-  while [ -z "$email" ]; do
-    echo -en "\n"
-    read -p "Your Email Address: " email
-  done
-
-  while [ -z "$username" ]; do
-    echo -en "\n"
-    read -p "Username: " username
-  done
-
-  while [ -z "$pass" ]; do
-    echo -en "\n"
-    read -s -p "Password: " pass
-    echo -en "\n"
-  done
-
-  while [ -z "$title" ]; do
-    echo -en "\n"
-    read -p "Blog Title: " title
-  done
-}
-
-wordpress_admin_account
-
-while true; do
-    echo -en "\nIs the information correct? [Y/n] "
-    read -r confirmation
-    confirmation=${confirmation,,}
-    if [[ "$confirmation" =~ ^(yes|y)$ ]] || [ -z "$confirmation" ]; then
-      break
-    else
-      unset email username pass title confirmation
-      wordpress_admin_account
-    fi
-done
-
 echo -en "\n\nNext, you have the option of configuring LetsEncrypt to secure your new site."
 echo "Before proceeding, ensure that your domain ($dom) is pointed to this server's IP address."
 echo "You can also run Certbot later with 'certbot --nginx'."
@@ -122,17 +136,5 @@ case $yn in
         echo "Please answer y or n."
         ;;
 esac
-
-echo "Finalizing installation..."
-wget https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar -O /usr/bin/wp
-chmod +x /usr/bin/wp
-
-echo -en "\nCompleting the configuration of WordPress..."
-wp core install --allow-root --path="/var/www/html" --title="$title" --url="$dom" --admin_email="$email" --admin_password="$pass" --admin_user="$username"
-
-wp plugin install wp-fail2ban elementor autoptimize --allow-root --path="/var/www/html"
-wp plugin activate wp-fail2ban elementor autoptimize --allow-root --path="/var/www/html"
-wp theme install hello-elementor --activate --allow-root --path="/var/www/html"
-chown -Rf www-data:www-data /var/www/
 
 echo "Installation complete. Access your new WordPress site in a browser to continue."
