@@ -35,7 +35,33 @@ while [ $a -eq 0 ]; do
 done
 
 # Update the nginx configuration file with the provided domain
-# (Assuming a template file exists at /etc/nginx/sites-available/wordpress with a placeholder "$domain")
+cat << 'EOF' > /etc/nginx/sites-available/wordpress
+server {
+  listen 80;
+  server_name $domain;
+
+  root /var/www/html;
+  index index.php index.html index.htm;
+
+  # WordPress pretty permalinks support
+  location / {
+    try_files $uri $uri/ /index.php?$args;
+  }
+
+  # Pass PHP scripts to FastCGI server
+  location ~ \.php$ {
+    include fastcgi_params;
+    fastcgi_pass unix:/run/php/php-fpm.sock;
+    fastcgi_index index.php;
+    fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+  }
+
+  # Deny access to hidden files
+  location ~ /\. {
+    deny all;
+  }
+}
+EOF
 sed -i "s/\$domain/$dom/g" /etc/nginx/sites-available/wordpress
 
 # Enable the nginx site configuration (and disable default if needed)
