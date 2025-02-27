@@ -63,11 +63,12 @@ read -s -p "Enter new password for MariaDB root user: " MYSQL_ROOT_PASS
 echo ""
 
 echo "Securing MariaDB..."
-mysql -e "UPDATE mysql.user SET Password=PASSWORD('$MYSQL_ROOT_PASS') WHERE User='root';"
+mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED BY '$MYSQL_ROOT_PASS';"
 mysql -e "DELETE FROM mysql.user WHERE User='';"
 mysql -e "DROP DATABASE IF EXISTS test;"
 mysql -e "DELETE FROM mysql.db WHERE Db='test' OR Db='test\\_%';"
 mysql -e "FLUSH PRIVILEGES;"
+
 
 # Setup ZSH and oh-my-zsh if desired
 read -p "Do you want to install and configure zsh and oh-my-zsh? (y/N): " ZSH
