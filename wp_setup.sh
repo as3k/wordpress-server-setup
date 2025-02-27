@@ -2,28 +2,23 @@
 #
 # WordPress activation script (nginx version)
 #
-# This script will configure nginx with the domain
-# provided by the user and offer the option to set up
-# LetsEncrypt as well.
+# This script will configure nginx with the domain provided by the user,
+# create and enable a WordPress server block, and offer the option to set up LetsEncrypt.
 
-# Move WordPress into the web root on first login
-if [[ -d /var/www/wordpress ]]; then
-  mv /var/www/html /var/www/html.old
-  mv /var/www/wordpress /var/www/html
-fi
+# Move the existing web root (if any) and create a new one
+mv /var/www/html /var/www/html.old 2>/dev/null
+mkdir -p /var/www/html
 chown -Rf www-data:www-data /var/www/html
 
-# Inform the user about the WordPress installation process
-echo "This script will copy the WordPress installation into"
-echo "your web root (/var/www/html) and move the existing one to /var/www/html.old."
+echo "This script will copy the WordPress installation into your web root (/var/www/html)"
+echo "and move any existing installation to /var/www/html.old."
 echo "--------------------------------------------------"
-echo "This setup requires a domain name. If you do not have one yet, you may"
-echo "cancel this setup (Ctrl+C). You can run this script again later by running ./wp_setup."
-echo "--------------------------------------------------"
-echo "Enter the domain name for your new WordPress site."
-echo "(ex. example.org or test.example.org). Do not include www or http/https."
+echo "This setup requires a domain name. If you do not have one, press Ctrl+C to cancel."
+echo "Enter the domain name for your new WordPress site (ex: example.org or test.example.org)."
+echo "Do not include www or http/https."
 echo "--------------------------------------------------"
 
+# Prompt for domain name until valid input is provided
 a=0
 while [ $a -eq 0 ]; do
   read -p "Domain/Subdomain name: " dom
@@ -34,51 +29,46 @@ while [ $a -eq 0 ]; do
   fi
 done
 
-# Update the nginx configuration file with the provided domain
-cat << 'EOF' > /etc/nginx/sites-available/wordpress
+# Create the nginx server block for WordPress using the provided domain
+NGINX_CONF="/etc/nginx/sites-available/$dom"
+cat > "$NGINX_CONF" <<EOL
 server {
-  listen 80;
-  server_name $domain;
+    listen 80;
+    server_name $dom www.$dom;
+    root /var/www/html;
+    index index.php index.html index.htm;
 
-  root /var/www/html;
-  index index.php index.html index.htm;
+    location / {
+        try_files \$uri \$uri/ /index.php?\$args;
+    }
 
-  # WordPress pretty permalinks support
-  location / {
-    try_files $uri $uri/ /index.php?$args;
-  }
+    location ~ \.php\$ {
+        include snippets/fastcgi-php.conf;
+        fastcgi_pass unix:/var/run/php/php-fpm.sock;
+    }
 
-  # Pass PHP scripts to FastCGI server
-  location ~ \.php$ {
-    include fastcgi_params;
-    fastcgi_pass unix:/run/php/php-fpm.sock;
-    fastcgi_index index.php;
-    fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
-  }
-
-  # Deny access to hidden files
-  location ~ /\. {
-    deny all;
-  }
+    location ~* \.(js|css|png|jpg|jpeg|gif|ico)\$ {
+        expires max;
+        log_not_found off;
+    }
 }
-EOF
-sed -i "s/\$domain/$dom/g" /etc/nginx/sites-available/wordpress
+EOL
 
-# Enable the nginx site configuration (and disable default if needed)
-if [ ! -L /etc/nginx/sites-enabled/wordpress ]; then
-  ln -s /etc/nginx/sites-available/wordpress /etc/nginx/sites-enabled/
+# Enable the new server block and disable the default if present
+if [ ! -L /etc/nginx/sites-enabled/$dom ]; then
+    ln -s "$NGINX_CONF" /etc/nginx/sites-enabled/$dom
 fi
 if [ -e /etc/nginx/sites-enabled/default ]; then
-  rm /etc/nginx/sites-enabled/default
+    rm /etc/nginx/sites-enabled/default
 fi
 
 echo "Restarting nginx..."
 systemctl restart nginx
 
-echo -en "Now we will create your new admin user account for WordPress."
+echo -en "\nNow we will create your new admin user account for WordPress."
 
 # Function to prompt for WordPress admin account details
-function wordpress_admin_account() {
+function wordpress_admin_account(){
   while [ -z "$email" ]; do
     echo -en "\n"
     read -p "Your Email Address: " email
@@ -104,27 +94,26 @@ function wordpress_admin_account() {
 wordpress_admin_account
 
 while true; do
-  echo -en "\n"
-  read -p "Is the information correct? [Y/n] " confirmation
-  confirmation=${confirmation,,}
-  if [[ "$confirmation" =~ ^(yes|y)$ ]] || [ -z "$confirmation" ]; then
-    break
-  else
-    unset email username pass title confirmation
-    wordpress_admin_account
-  fi
+    echo -en "\nIs the information correct? [Y/n] "
+    read -r confirmation
+    confirmation=${confirmation,,}
+    if [[ "$confirmation" =~ ^(yes|y)$ ]] || [ -z "$confirmation" ]; then
+      break
+    else
+      unset email username pass title confirmation
+      wordpress_admin_account
+    fi
 done
 
-echo -en "\n\n\n"
-echo "Next, you have the option of configuring LetsEncrypt to secure your new site."
-echo "Before doing so, ensure that your domain or subdomain ($dom) is pointed to this server's IP."
-echo "You can also run Certbot later with the command 'certbot --nginx'."
-echo -en "\n\n\n"
-read -p "Would you like to use LetsEncrypt (certbot) to configure SSL (https) for your new site? (y/n): " yn
+echo -en "\n\nNext, you have the option of configuring LetsEncrypt to secure your new site."
+echo "Before proceeding, ensure that your domain ($dom) is pointed to this server's IP address."
+echo "You can also run Certbot later with 'certbot --nginx'."
+echo -en "\nWould you like to use LetsEncrypt (certbot) to configure SSL (https) for your site? (y/n): "
+read -r yn
 case $yn in
     [Yy]* )
         certbot --nginx
-        echo "WordPress has been enabled at https://$dom. Please open this URL in a browser to complete the setup of your site."
+        echo "WordPress has been enabled at https://$dom. Please open this URL in a browser to complete the setup."
         ;;
     [Nn]* )
         echo "Skipping LetsEncrypt certificate generation."
@@ -138,12 +127,12 @@ echo "Finalizing installation..."
 wget https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar -O /usr/bin/wp
 chmod +x /usr/bin/wp
 
-echo -en "Completing the configuration of WordPress."
+echo -en "\nCompleting the configuration of WordPress..."
 wp core install --allow-root --path="/var/www/html" --title="$title" --url="$dom" --admin_email="$email" --admin_password="$pass" --admin_user="$username"
 
-wp plugin install wp-fail2ban --allow-root --path="/var/www/html"
-wp plugin activate wp-fail2ban --allow-root --path="/var/www/html"
+wp plugin install wp-fail2ban elementor autoptimize --allow-root --path="/var/www/html"
+wp plugin activate wp-fail2ban elementor autoptimize --allow-root --path="/var/www/html"
+wp theme install hello-elementor --activate --allow-root --path="/var/www/html"
 chown -Rf www-data:www-data /var/www/
-cp /etc/skel/.bashrc /root
 
 echo "Installation complete. Access your new WordPress site in a browser to continue."
