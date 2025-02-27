@@ -18,6 +18,31 @@ echo "Enter the domain name for your new WordPress site (ex: example.org or test
 echo "Do not include www or http/https."
 echo "--------------------------------------------------"
 
+# Prompt for domain name until valid input is provided
+a=0
+while [ $a -eq 0 ]; do
+  read -p "Domain/Subdomain name: " dom
+  if [ -z "$dom" ]; then
+    echo "Please provide a valid domain or subdomain name to continue, or press Ctrl+C to cancel."
+  else
+    a=1
+  fi
+done
+
+sanitize_domain() {
+  local input="$1"
+  echo "${input//./_}"
+}
+
+domain_safe=$(sanitize_domain "$dom")
+
+generate_random_password() {
+  # Generates a secure 16-character random string
+  tr -dc 'A-Za-z0-9!@#$%^&*()-_=+' < /dev/urandom | head -c16
+}
+
+DB_PASSWORD=$(generate_random_password)
+
 echo -en "\nNow we will create your new admin user account for WordPress."
 
 # Function to prompt for WordPress admin account details
@@ -65,6 +90,7 @@ chmod +x /usr/bin/wp
 # Install wordpress
 echo -en "\Setting up WordPress..."
 wp core download --allow-root --path="/var/www/html"
+wp config create --allow-root --path="/var/www/html" --dbname="$domain_safe" --dbuser="$domain_safe" --dbpass="$DB_PASSWORD" --dbhost=localhost
 wp core install --allow-root --path="/var/www/html" --title="$title" --url="$dom" --admin_email="$email" --admin_password="$pass" --admin_user="$username"
 
 wp plugin install wp-fail2ban elementor autoptimize --allow-root --path="/var/www/html"
@@ -73,16 +99,6 @@ wp theme install hello-elementor --activate --allow-root --path="/var/www/html"
 chown -Rf www-data:www-data /var/www/
 echo "WordPress has been installed...\n"
 
-# Prompt for domain name until valid input is provided
-a=0
-while [ $a -eq 0 ]; do
-  read -p "Domain/Subdomain name: " dom
-  if [ -z "$dom" ]; then
-    echo "Please provide a valid domain or subdomain name to continue, or press Ctrl+C to cancel."
-  else
-    a=1
-  fi
-done
 
 # Create the nginx server block for WordPress using the provided domain
 NGINX_CONF="/etc/nginx/sites-available/$dom"
