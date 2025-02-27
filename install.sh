@@ -6,6 +6,20 @@ if [ "$EUID" -ne 0 ]; then
   exit 1
 fi
 
+# Display a welcome message
+echo "Welcome to the server setup script!"
+echo ""
+
+# Setup new user account  (if desired)
+read -p "Do you want to create a new user account? (Y/n): " NEW_USER
+if [[ "$NEW_USER" =~ ^[Yy] ]]; then
+  read -p "Enter the username for the new user: " NEW_USERNAME
+  adduser "$NEW_USERNAME"
+  usermod -aG sudo "$NEW_USERNAME"
+  echo "New user account created."
+  echo ""
+fi
+
 # Update package list and install required packages
 echo "Updating package list..."
 apt-get update
